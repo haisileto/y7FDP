@@ -6,19 +6,6 @@
     <title>Year 7 FDP Mastery Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chosen Palette: Harmony Blue & Amber -->
-    <!-- Application Structure Plan: 
-         The SPA is designed as a tabbed dashboard to reduce cognitive load. 
-         1. Visual Explorer: Uses a CSS Grid-based 100-square for tactile concept building.
-         2. Rule Book: Static reference for quick strategy lookup.
-         3. Master: Selective word problem solver to show real-world application.
-         4. Arena: A gamified 'endless' mode with state-managed lives and trophies to drive engagement.
-         Logic is handled by a central state object and DOM-patching functions. -->
-    <!-- Visualization & Content Choices: 
-         - 100-Square: HTML/CSS Grid for interactive FDP visualization.
-         - Stats: Dynamic counters for Lives/Trophies.
-         - Feedback: CSS 'shake' animation for errors.
-         - NO SVG/Mermaid used for diagrams. -->
-    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
     <style>
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
@@ -28,8 +15,16 @@
         .shake { animation: shake 0.2s ease-in-out 0s 2; }
         .tab-active { background-color: #2563eb; color: white; box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4); }
         .arena-tab-active { background-color: #f59e0b; color: white; box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.4); }
+        
+        /* Custom range slider styling for better cross-browser support */
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
         input[type=range]::-webkit-slider-runnable-track { background: #dbeafe; border-radius: 999px; height: 12px; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; background: #2563eb; border-radius: 50%; cursor: pointer; margin-top: -6px; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        
+        /* Smooth transitions for tab switching */
+        #app-container { transition: opacity 0.2s ease-in-out; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 font-sans min-h-screen">
@@ -71,7 +66,7 @@
                 trophies: 0,
                 currentQuestion: null,
                 isGameOver: false,
-                feedback: null // 'correct', 'wrong'
+                feedback: null 
             }
         };
 
@@ -96,13 +91,28 @@
 
         function switchTab(tabId) {
             state.activeTab = tabId;
-            render();
-            if(tabId === 'arena' && !state.arena.currentQuestion) generateArenaQuestion();
+            if(tabId === 'arena' && !state.arena.currentQuestion) {
+                generateArenaQuestion();
+            } else {
+                render();
+            }
         }
 
         function updateGrid(val) {
             state.gridValue = parseInt(val);
-            render();
+            // Targeted update for performance instead of full render
+            document.getElementById('grid-display').innerHTML = generateGridHTML(state.gridValue);
+            document.getElementById('val-fraction').innerText = `${state.gridValue}/100`;
+            document.getElementById('val-decimal').innerText = (state.gridValue/100).toFixed(2);
+            document.getElementById('val-percent').innerText = `${state.gridValue}%`;
+        }
+
+        function generateGridHTML(val) {
+            let html = '';
+            for(let i=0; i<100; i++) {
+                html += `<div class="rounded-sm aspect-square ${i < val ? 'bg-blue-500' : 'bg-slate-100'}"></div>`;
+            }
+            return html;
         }
 
         // --- Arena Logic ---
@@ -118,18 +128,18 @@
                 const n = Math.floor(Math.random() * (d - 1)) + 1;
                 q.text = `Convert ${n}/${d} to a percentage.`;
                 q.answer = ((n / d) * 100).toString();
-                q.hint = "Multiply the denominator to reach 100.";
+                q.hint = "Try to make the denominator 100.";
             } else if (type === 'p2f') {
-                const val = [20, 25, 50, 75][Math.floor(Math.random() * 4)];
+                const val = [20, 25, 40, 50, 75, 80][Math.floor(Math.random() * 6)];
                 q.text = `Simplify ${val}% to a fraction (e.g. 1/4).`;
                 const gcd = (a, b) => b ? gcd(b, a % b) : a;
                 const common = gcd(val, 100);
                 q.answer = `${val/common}/${100/common}`;
-                q.hint = "Place over 100 and divide both sides.";
+                q.hint = "Write it as a fraction over 100 first.";
             } else {
-                const val = (Math.random() * 0.9 + 0.1).toFixed(2);
-                q.text = `Convert ${val} to a percentage.`;
-                q.answer = (parseFloat(val) * 100).toString();
+                const val = (Math.random() * 0.8 + 0.1).toFixed(2);
+                q.text = `Convert the decimal ${val} to a percentage.`;
+                q.answer = Math.round(parseFloat(val) * 100).toString();
                 q.hint = "Move the decimal point 2 places right.";
             }
 
@@ -141,14 +151,14 @@
         function checkArenaAnswer(event) {
             event.preventDefault();
             const input = document.getElementById('arena-input');
-            const val = input.value.trim();
+            const val = input.value.trim().replace('%', '');
 
             if (val === state.arena.currentQuestion.answer) {
                 state.arena.feedback = 'correct';
                 state.arena.trophies++;
-                if (state.arena.trophies % 5 === 0) state.arena.lives = 3;
+                if (state.arena.trophies % 5 === 0) state.arena.lives = Math.min(state.arena.lives + 1, 3);
                 render();
-                setTimeout(generateArenaQuestion, 1000);
+                setTimeout(generateArenaQuestion, 800);
             } else {
                 state.arena.feedback = 'wrong';
                 state.arena.lives--;
@@ -167,62 +177,64 @@
             const container = document.getElementById('app-container');
             const footerText = document.getElementById('footer-text');
             
-            // Update Navigation
-            document.querySelectorAll('nav button').forEach(btn => btn.className = btn.className.replace(/tab-active|arena-tab-active/g, '').trim());
+            // Update Navigation UI
+            document.querySelectorAll('nav button').forEach(btn => {
+                btn.className = "px-4 py-2 rounded-full font-medium transition-all whitespace-nowrap bg-white text-slate-600 border border-slate-200 hover:bg-slate-100";
+            });
             const activeBtn = document.getElementById(`nav-${state.activeTab}`);
-            activeBtn.classList.add(state.activeTab === 'arena' ? 'arena-tab-active' : 'tab-active');
+            activeBtn.className = `px-4 py-2 rounded-full font-medium transition-all whitespace-nowrap ${state.activeTab === 'arena' ? 'arena-tab-active' : 'tab-active'}`;
 
             if (state.activeTab === 'explore') {
                 footerText.innerText = "Use the slider to see how one number can be written in three different ways.";
-                let gridHTML = '';
-                for(let i=0; i<100; i++) {
-                    gridHTML += `<div class="rounded-sm aspect-square ${i < state.gridValue ? 'bg-blue-500' : 'bg-slate-100'}"></div>`;
-                }
                 container.innerHTML = `
-                    <div class="flex flex-col md:flex-row gap-8">
+                    <div class="flex flex-col md:flex-row gap-8 animate-in fade-in duration-300">
                         <div class="w-full md:w-1/2">
                             <h2 class="text-xl font-bold mb-4">&#9638; 100-Square Explorer</h2>
-                            <div class="grid grid-cols-10 gap-1 border-4 border-slate-50 p-1 bg-white rounded-lg shadow-inner mb-6">
-                                ${gridHTML}
+                            <div id="grid-display" class="grid grid-cols-10 gap-1 border-4 border-slate-50 p-1 bg-white rounded-lg shadow-inner mb-6">
+                                ${generateGridHTML(state.gridValue)}
                             </div>
                             <input type="range" min="0" max="100" value="${state.gridValue}" oninput="updateGrid(this.value)" class="w-full appearance-none cursor-pointer">
                         </div>
                         <div class="w-full md:w-1/2 space-y-4">
                             <h2 class="text-xl font-bold mb-4">&#128640; Live Values</h2>
                             <div class="grid grid-cols-3 gap-2">
-                                <div class="p-3 bg-blue-50 rounded-xl text-center"><span class="block text-[10px] uppercase font-bold text-blue-400">Fraction</span><span class="text-xl font-mono font-bold">${state.gridValue}/100</span></div>
-                                <div class="p-3 bg-blue-50 rounded-xl text-center"><span class="block text-[10px] uppercase font-bold text-blue-400">Decimal</span><span class="text-xl font-mono font-bold">${(state.gridValue/100).toFixed(2)}</span></div>
-                                <div class="p-3 bg-blue-50 rounded-xl text-center"><span class="block text-[10px] uppercase font-bold text-blue-400">Percent</span><span class="text-xl font-mono font-bold">${state.gridValue}%</span></div>
+                                <div class="p-3 bg-blue-50 rounded-xl text-center"><span class="block text-[10px] uppercase font-bold text-blue-400">Fraction</span><span id="val-fraction" class="text-xl font-mono font-bold">${state.gridValue}/100</span></div>
+                                <div class="p-3 bg-blue-50 rounded-xl text-center"><span class="block text-[10px] uppercase font-bold text-blue-400">Decimal</span><span id="val-decimal" class="text-xl font-mono font-bold">${(state.gridValue/100).toFixed(2)}</span></div>
+                                <div class="p-3 bg-blue-50 rounded-xl text-center"><span class="block text-[10px] uppercase font-bold text-blue-400">Percent</span><span id="val-percent" class="text-xl font-mono font-bold">${state.gridValue}%</span></div>
                             </div>
                             <div class="p-4 bg-orange-50 border-l-4 border-orange-400 rounded-r-xl text-sm italic">
-                                <strong>Pro-Tip:</strong> Percents are always out of 100.
+                                <strong>Pro-Tip:</strong> Percents always mean "per 100".
                             </div>
                         </div>
                     </div>
                 `;
             }
 
-            if (state.activeTab === 'practice') {
+            else if (state.activeTab === 'practice') {
                 footerText.innerText = "Memorize these rules to master FDP conversions quickly.";
                 container.innerHTML = `
-                    <h2 class="text-xl font-bold mb-6">The Conversion Playbook</h2>
-                    <div class="grid md:grid-cols-2 gap-4">
-                        <div class="p-5 bg-green-50 rounded-xl border border-green-200">
-                            <h3 class="font-bold text-green-800 mb-2">&#10145; Decimals to %</h3>
-                            <p class="text-sm">Multiply by 100. Shift the point 2 places Right.</p>
-                        </div>
-                        <div class="p-5 bg-purple-50 rounded-xl border border-purple-200">
-                            <h3 class="font-bold text-purple-800 mb-2">&#10145; % to Fractions</h3>
-                            <p class="text-sm">Put over 100 and divide until simplified.</p>
+                    <div class="animate-in slide-in-from-right duration-300">
+                        <h2 class="text-xl font-bold mb-6">The Conversion Playbook</h2>
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <div class="p-5 bg-green-50 rounded-xl border border-green-200">
+                                <h3 class="font-bold text-green-800 mb-2">&#10145; Decimals to %</h3>
+                                <p class="text-sm">Multiply by 100. Shift the point 2 places Right.</p>
+                                <p class="text-xs mt-2 text-green-600 font-mono">0.45 &rarr; 45%</p>
+                            </div>
+                            <div class="p-5 bg-purple-50 rounded-xl border border-purple-200">
+                                <h3 class="font-bold text-purple-800 mb-2">&#10145; % to Fractions</h3>
+                                <p class="text-sm">Put over 100 and divide until simplified.</p>
+                                <p class="text-xs mt-2 text-purple-600 font-mono">20% &rarr; 20/100 &rarr; 1/5</p>
+                            </div>
                         </div>
                     </div>
                 `;
             }
 
-            if (state.activeTab === 'wordproblems') {
+            else if (state.activeTab === 'wordproblems') {
                 footerText.innerText = "Real world math often hides fractions in sentences. Look for 'out of'.";
                 container.innerHTML = `
-                    <div class="space-y-6">
+                    <div class="space-y-6 animate-in slide-in-from-bottom duration-300">
                         <h2 class="text-xl font-bold">Exam Scenario Master</h2>
                         ${wordProblems.map(p => `
                             <div class="p-6 bg-slate-50 border border-slate-200 rounded-2xl">
@@ -240,25 +252,25 @@
                 `;
             }
 
-            if (state.activeTab === 'arena') {
+            else if (state.activeTab === 'arena') {
                 footerText.innerText = "Trophies are earned by correct answers. Don't let your hearts reach zero!";
                 if(state.arena.isGameOver) {
                     container.innerHTML = `
-                        <div class="text-center py-12 space-y-6">
+                        <div class="text-center py-12 space-y-6 animate-in zoom-in duration-300">
                             <div class="text-6xl">&#10060;</div>
                             <h2 class="text-3xl font-bold">Game Over</h2>
                             <p class="text-lg">You earned <strong>${state.arena.trophies}</strong> trophies!</p>
-                            <button onclick="resetArena()" class="px-8 py-3 bg-blue-600 text-white rounded-full font-bold shadow-lg">Try Again</button>
+                            <button onclick="resetArena()" class="px-8 py-3 bg-blue-600 text-white rounded-full font-bold shadow-lg active:scale-95 transition-transform">Try Again</button>
                         </div>
                     `;
                 } else {
                     let hearts = '';
                     for(let i=0; i<3; i++) {
-                        hearts += `<span class="text-2xl ${i < state.arena.lives ? 'text-red-500' : 'text-slate-300'}">&#10084;</span>`;
+                        hearts += `<span class="text-2xl ${i < state.arena.lives ? 'text-red-500' : 'text-slate-300'}">${i < state.arena.lives ? '&#10084;' : '&#9825;'}</span>`;
                     }
                     container.innerHTML = `
-                        <div class="space-y-6">
-                            <div class="flex justify-between items-center bg-slate-900 p-4 rounded-xl text-white">
+                        <div class="space-y-6 animate-in fade-in duration-300">
+                            <div class="flex justify-between items-center bg-slate-900 p-4 rounded-xl text-white shadow-inner">
                                 <div class="flex gap-1">${hearts}</div>
                                 <div class="flex items-center gap-2">
                                     <span class="text-amber-400 font-bold">${state.arena.trophies}</span>
@@ -266,26 +278,32 @@
                                 </div>
                             </div>
                             <div class="text-center max-w-sm mx-auto space-y-6">
-                                <h3 class="text-2xl font-bold">${state.arena.currentQuestion?.text || 'Loading...'}</h3>
+                                <h3 class="text-2xl font-bold text-slate-800">${state.arena.currentQuestion?.text || 'Generating Challenge...'}</h3>
                                 <form onsubmit="checkArenaAnswer(event)" class="space-y-4">
-                                    <input type="text" id="arena-input" autocomplete="off" 
+                                    <input type="text" id="arena-input" autocomplete="off" inputmode="text"
                                         class="w-full p-4 text-center text-3xl font-mono font-bold border-4 rounded-2xl focus:outline-none 
-                                        ${state.arena.feedback === 'wrong' ? 'border-red-400 bg-red-50 shake' : 'border-slate-100 focus:border-blue-500'}">
-                                    <button class="w-full py-4 bg-slate-800 text-white font-bold rounded-xl">Check Answer</button>
+                                        ${state.arena.feedback === 'wrong' ? 'border-red-400 bg-red-50 shake' : state.arena.feedback === 'correct' ? 'border-green-400 bg-green-50' : 'border-slate-100 focus:border-blue-500'} transition-colors">
+                                    <button class="w-full py-4 bg-slate-800 text-white font-bold rounded-2xl shadow-lg hover:bg-slate-700 active:scale-95 transition-all">Check Answer</button>
                                 </form>
-                                <div class="p-3 bg-blue-50 rounded-lg text-xs italic text-blue-700">
-                                    <strong>Hint:</strong> ${state.arena.currentQuestion?.hint}
+                                <div class="p-4 bg-blue-50 rounded-xl text-xs italic text-blue-700 border border-blue-100">
+                                    <strong>Coach Hint:</strong> ${state.arena.currentQuestion?.hint}
                                 </div>
                             </div>
                         </div>
                     `;
-                    document.getElementById('arena-input').focus();
+                    // Delay focus to ensure DOM is ready and prevent mobile keyboard issues
+                    setTimeout(() => {
+                        const input = document.getElementById('arena-input');
+                        if(input) input.focus();
+                    }, 50);
                 }
             }
         }
 
-        // Initial render
-        window.onload = () => switchTab('explore');
+        // Initial setup
+        window.onload = () => {
+            switchTab('explore');
+        };
     </script>
 </body>
 </html>
